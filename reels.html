@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Reels Player</title>
+    <style>
+        body { 
+            margin: 0; padding: 0; background-color: #000; color: #fff; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            display: flex; flex-direction: column; align-items: center; 
+            height: 100vh; overflow-y: auto; overflow-x: hidden;
+        }
+        .reel-wrapper {
+            width: 100%; max-width: 400px; background: #000; 
+            display: flex; justify-content: center; padding-top: 20px;
+        }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="reel-wrapper" id="reel-container">
+        <h3 style="color:#64748b;">Loading Instagram Reel...</h3>
+    </div>
+
+    <script async src="https://www.instagram.com/embed.js"></script>
+    <script>
+        window.Telegram.WebApp.expand();
+        window.Telegram.WebApp.ready();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const igUrl = urlParams.get('url');
+        const container = document.getElementById('reel-container');
+
+        if (igUrl) {
+            let cleanUrl = decodeURIComponent(igUrl).split('?')[0].replace(/\/$/, '');
+            
+            container.innerHTML = `
+                <blockquote class="instagram-media" 
+                    data-instgrm-permalink="${cleanUrl}/?utm_source=ig_embed" 
+                    data-instgrm-version="14" 
+                    style="background:#000; border:0; margin:0; padding:0; width:100%; min-width:300px;">
+                </blockquote>
+            `;
+            
+            setTimeout(() => {
+                if (window.instgrm) {
+                    window.instgrm.Embeds.process();
+                }
+            }, 500);
+        } else {
+            container.innerHTML = '<h3 style="color:#ef4444;">❌ No URL provided</h3>';
+        }
+    </script>
+</body>
+</html>
