@@ -192,7 +192,7 @@ async def execute_jio_search(message: types.Message, query: str):
 @dp.callback_query(F.data.startswith("jiosong_"))
 async def handle_song_selection(callback: types.CallbackQuery):
     song_id = callback.data.split("_")[1]
-    status_msg = await callback.message.answer("⏳ Buffering visual elements and audio track...")
+    status_msg = await callback.message.answer("⏳ Buffering media elements and audio track...")
     await callback.answer()
     
     api_url = f"{JIOSAAVN_API_BASE}/songs/{song_id}"
@@ -226,13 +226,21 @@ async def handle_song_selection(callback: types.CallbackQuery):
             await status_msg.edit_text("❌ Direct audio source track missing from API.")
             return
 
-        # Step 2: Download Audio directly to memory (RAM)
+        # Step 2: Download Audio & Cover Art directly to memory (RAM)
+        thumb_bytes = None
         async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
+            # Fetch Audio
             async with session.get(stream_url, timeout=20) as audio_resp:
                 if audio_resp.status != 200:
                     await status_msg.edit_text("❌ Failed to stream the audio file.")
                     return
                 audio_bytes = await audio_resp.read()
+            
+            # Fetch Cover Art for Thumbnail
+            if art_url:
+                async with session.get(art_url, timeout=10) as img_resp:
+                    if img_resp.status == 200:
+                        thumb_bytes = await img_resp.read()
 
         # Step 3: Native Interaction Control Buttons
         native_control_markup = InlineKeyboardMarkup(inline_keyboard=[
@@ -242,36 +250,25 @@ async def handle_song_selection(callback: types.CallbackQuery):
             ]
         ])
 
-        # Added dynamic status at the bottom of the visual frame card text
+        # Step 4: Combine text into a single cohesive message frame
         visual_frame_caption = (
-            f"🎬 <b>NATIVE VISUAL FRAME ACTIVE</b>\n"
+            f"🎬 <b>NATIVE VIDEO FRAME ACTIVE</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"🎵 <b>Track:</b> {title}\n"
             f"🎤 <b>Artist:</b> {artists}\n"
             f"💿 <b>Album:</b> {album} ({year})\n\n"
-            f"▶️ <b>Now Playing:</b> <i>Selected audio track loading below...</i>"
+            f"▶️ <b>Now Playing:</b> <i>Attached below...</i>"
         )
 
         audio_file = BufferedInputFile(audio_bytes, filename=f"{title}.mp3")
+        thumb_file = BufferedInputFile(thumb_bytes, filename="cover.jpg") if thumb_bytes else None
 
-        # Step 4: Dispatch native media layout sequentially
-        if art_url:
-            await callback.message.answer_photo(
-                photo=art_url, 
-                caption=visual_frame_caption, 
-                reply_markup=native_control_markup, 
-                parse_mode="HTML"
-            )
-        else:
-            await callback.message.answer(
-                visual_frame_caption, 
-                reply_markup=native_control_markup, 
-                parse_mode="HTML"
-            )
-
-        # Triggers the audio asset immediately directly underneath the graphic card
+        # Send as a SINGLE unified audio message (caption + inline buttons + audio player + cover art)
         await callback.message.answer_audio(
             audio=audio_file,
+            thumbnail=thumb_file,
+            caption=visual_frame_caption,
+            reply_markup=native_control_markup,
             title=title,
             performer=artists,
             parse_mode="HTML"
