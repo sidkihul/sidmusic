@@ -26,7 +26,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 # ================= Configuration =================
-TELEGRAM_BOT_TOKEN = "6067177575:AAEUVOteOiERUHE5v75iudEdHAGiCRXBGus"
+TELEGRAM_BOT_TOKEN = "YOUR_VALID_TOKEN_HERE"
 JIOSAAVN_API_BASE = "https://jiosavanapiryden.vercel.app/api"
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
@@ -81,8 +81,6 @@ async def handle_reels_command(message: types.Message):
     status_msg = await message.answer("🎬 <i>Processing native Instagram Video Frame...</i>", parse_mode="HTML")
     await asyncio.sleep(1)
     
-    # NOTE: To send actual native videos like your screenshot, pass your video URL/file to video= below.
-    # Since web apps are removed, we display a placeholder layout pointing out native video handling.
     await status_msg.delete()
     await message.answer(
         "🎬 <b>NATIVE VIDEO PLAYER</b>\n\n"
@@ -236,7 +234,7 @@ async def handle_song_selection(callback: types.CallbackQuery):
                     return
                 audio_bytes = await audio_resp.read()
 
-        # Step 3: Native Interaction Control Buttons (Matches Screenshot Style)
+        # Step 3: Native Interaction Control Buttons
         native_control_markup = InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(text="📣 Updates Channel", url="https://t.me/your_channel"),
@@ -244,18 +242,19 @@ async def handle_song_selection(callback: types.CallbackQuery):
             ]
         ])
 
+        # Added dynamic status at the bottom of the visual frame card text
         visual_frame_caption = (
             f"🎬 <b>NATIVE VISUAL FRAME ACTIVE</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"🎵 <b>Track:</b> {title}\n"
             f"🎤 <b>Artist:</b> {artists}\n"
-            f"💿 <b>Album:</b> {album} ({year})"
+            f"💿 <b>Album:</b> {album} ({year})\n\n"
+            f"▶️ <b>Now Playing:</b> <i>Selected audio track loading below...</i>"
         )
 
         audio_file = BufferedInputFile(audio_bytes, filename=f"{title}.mp3")
 
         # Step 4: Dispatch native media layout sequentially
-        # Send the Album artwork image frame directly above the raw music clip track
         if art_url:
             await callback.message.answer_photo(
                 photo=art_url, 
@@ -270,6 +269,7 @@ async def handle_song_selection(callback: types.CallbackQuery):
                 parse_mode="HTML"
             )
 
+        # Triggers the audio asset immediately directly underneath the graphic card
         await callback.message.answer_audio(
             audio=audio_file,
             title=title,
