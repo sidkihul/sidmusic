@@ -26,7 +26,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 # ================= Configuration =================
-TELEGRAM_BOT_TOKEN = "YOUR_VALID_TOKEN_HERE"
+TELEGRAM_BOT_TOKEN = "6067177575:AAEUVOteOiERUHE5v75iudEdHAGiCRXBGus"
 JIOSAAVN_API_BASE = "https://jiosavanapiryden.vercel.app/api"
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
