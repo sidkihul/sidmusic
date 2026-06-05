@@ -20,7 +20,7 @@ import asyncio
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ForceReply
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ForceReply, BufferedInputFile
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import State, StatesGroup
@@ -29,7 +29,7 @@ from aiogram.fsm.context import FSMContext
 # ================= Configuration =================
 TELEGRAM_BOT_TOKEN = "6067177575:AAEUVOteOiERUHE5v75iudEdHAGiCRXBGus"
 JIOSAAVN_API_BASE = "https://jiosavanapiryden.vercel.app/api"
-HOSTED_FRAME_URL = "https://web-production-da71d.up.railway.app"
+HOSTED_FRAME_URL = "https://your-secure-https-domain.com/frame"
 PRIMARY_WEB_PORT = 8081 
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
@@ -45,7 +45,7 @@ class BotStates(StatesGroup):
 async def serve_html_frame(request):
     """Serves the external music.html file"""
     file_path = os.path.join(os.path.dirname(__file__), 'music.html')
-    return web.FileResponse(file_path)
+    return web.FileResponse(file_path) grade
 
 async def serve_reels_frame(request):
     """Serves the external reels.html file"""
@@ -84,7 +84,7 @@ async def handle_jio_command(message: types.Message):
     if len(args) < 2:
         await message.answer("❌ Usage: `/jio <song name>`")
         return
-    await execute_jio_search(message, args[1])
+    await execute_jio_search(message, args[1]) grade
 
 @dp.message(Command("reels"))
 async def handle_reels_command(message: types.Message):
@@ -202,7 +202,7 @@ async def execute_jio_search(message: types.Message, query: str):
             ])
             
         await status_msg.edit_text(
-            f"🎵 <b>SEARCH RESULTS</b>\n\n🔍 For: {query}\n✨ Select a song to frame:",
+            f"🎵 <b>SEARCH RESULTS</b>\n\n🔍 For: {query}\n✨ Select a song to generate your media elements:",
             reply_markup=markup,
             parse_mode="HTML"
         )
@@ -212,12 +212,13 @@ async def execute_jio_search(message: types.Message, query: str):
 @dp.callback_query(F.data.startswith("jiosong_"))
 async def handle_song_selection(callback: types.CallbackQuery):
     song_id = callback.data.split("_")[1]
-    status_msg = await callback.message.answer("⏳ Structuring Pro Audio Frame...")
+    status_msg = await callback.message.answer("⏳ Locating high-quality audio & video frames...")
     await callback.answer()
     
     api_url = f"{JIOSAAVN_API_BASE}/songs/{song_id}"
     
     try:
+        # Step 1: Fetch Song Details
         async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
             async with session.get(api_url, timeout=15) as response:
                 if response.status != 200:
@@ -245,8 +246,17 @@ async def handle_song_selection(callback: types.CallbackQuery):
             await status_msg.edit_text("❌ Direct audio source track missing from API.")
             return
             
-        await status_msg.delete()
-        
+        await status_msg.edit_text("⚡ Fast-buffering stream directly into RAM...")
+
+        # Step 2: Download Audio directly to memory (RAM) for maximum execution speed
+        async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
+            async with session.get(stream_url, timeout=20) as audio_resp:
+                if audio_resp.status != 200:
+                    await status_msg.edit_text("❌ Failed to stream the audio file.")
+                    return
+                audio_bytes = await audio_resp.read()
+
+        # Step 3: Package URL arguments for the Video Frame player
         enc_url = urllib.parse.quote_plus(stream_url)
         enc_title = urllib.parse.quote_plus(title)
         enc_artist = urllib.parse.quote_plus(artists)
@@ -254,21 +264,37 @@ async def handle_song_selection(callback: types.CallbackQuery):
         
         generated_frame_link = f"{HOSTED_FRAME_URL}?url={enc_url}&title={enc_title}&artist={enc_artist}&art={enc_art}"
         
-        output_control = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="▶️ Play Track in Group Frame", web_app=WebAppInfo(url=generated_frame_link))]
+        # Upper level UI control (Video Frame)
+        frame_control = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📺 Launch Visual/Video Frame Player", web_app=WebAppInfo(url=generated_frame_link))]
         ])
 
-        caption = (
+        frame_caption = (
+            f"🎬 <b>VIDEO FRAME ENGINE ACTIVE</b>\n"
+            f"▼ Click below to open the display interface for: <b>{title}</b>"
+        )
+
+        audio_file = BufferedInputFile(audio_bytes, filename=f"{title}.mp3")
+        
+        audio_caption = (
             f"🎵 <b>{title}</b>\n"
             f"━━━━━━━━━━━━━━━━\n"
             f"🎤 <b>Artist:</b> {artists}\n"
             f"💿 <b>Album:</b> {album}\n"
-            f"📅 <b>Year:</b> {year}\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            "Ready for playback:"
+            f"📅 <b>Year:</b> {year}"
         )
 
-        await callback.message.answer(caption, reply_markup=output_control, parse_mode="HTML")
+        # Step 4: Dispatch items in sequential order (Frame message stacked directly above Native Audio)
+        await callback.message.answer(frame_caption, reply_markup=frame_control, parse_mode="HTML")
+        await callback.message.answer_audio(
+            audio=audio_file,
+            caption=audio_caption,
+            title=title,
+            performer=artists,
+            parse_mode="HTML"
+        )
+        
+        await status_msg.delete()
 
     except Exception as e:
         await status_msg.edit_text(f"❌ Extraction Error: {e}")
