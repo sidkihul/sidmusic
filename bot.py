@@ -29,7 +29,7 @@ from aiogram.fsm.context import FSMContext
 # ================= Configuration =================
 TELEGRAM_BOT_TOKEN = "6067177575:AAEUVOteOiERUHE5v75iudEdHAGiCRXBGus"
 JIOSAAVN_API_BASE = "https://jiosavanapiryden.vercel.app/api"
-HOSTED_FRAME_URL = "https://your-secure-https-domain.com/frame"
+HOSTED_FRAME_URL = "https://web-production-da71d.up.railway.app"
 PRIMARY_WEB_PORT = 8081 
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
