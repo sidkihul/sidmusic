@@ -1,7 +1,6 @@
 import sys
 import subprocess
 import logging
-import urllib.parse
 import os
 import asyncio
 
@@ -20,7 +19,6 @@ except ImportError:
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply, BufferedInputFile
-from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -41,7 +39,7 @@ class BotStates(StatesGroup):
 def main_menu_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="🎶 Search Music (JioSaavn)", callback_data="switch_jio_mode"),
+            InlineKeyboardButton(text="🎶 Search Music (Menu)", callback_data="switch_jio_mode"),
             InlineKeyboardButton(text="📱 Download IG Reels", callback_data="switch_reels_mode")
         ],
         [
@@ -58,8 +56,9 @@ async def send_welcome(message: types.Message):
         f"🎵 WELCOME TO MELODY STREAM PRO 🎵\n\n"
         f"Hello {message.from_user.first_name}!\n"
         "Your ultimate destination for high-quality music streaming.\n\n"
-        "• `/jio <song name>` - Search & stream music directly inside the group.\n"
-        "• `/reels <ig link>` - Process Instagram Reels directly inside the group."
+        "• `/jio <song>` - Search & choose from a list.\n"
+        "• `/search <song>` or just `search <song>` - Instantly download the top result.\n"
+        "• `/reels <ig link>` - Process Instagram Reels."
     )
     await message.answer(welcome_text, reply_markup=main_menu_keyboard())
 
@@ -70,6 +69,49 @@ async def handle_jio_command(message: types.Message):
         await message.answer("❌ Usage: `/jio <song name>`")
         return
     await execute_jio_search(message, args[1])
+
+# ================= INSTANT FETCH ENGINE =================
+# Triggers on "/search song" or "search song"
+@dp.message(Command("search"))
+@dp.message(F.text.lower().startswith("search "))
+async def handle_instant_search(message: types.Message):
+    # Extract query depending on how it was triggered
+    if message.text.startswith('/'):
+        args = message.text.split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("❌ Usage: `/search <song name>`")
+            return
+        query = args[1]
+    else:
+        # "search " is 7 characters long, so we slice from index 7 onwards
+        query = message.text[7:].strip()
+        if not query:
+            return
+
+    status_msg = await message.answer(f"⚡ <b>Instant Fetch:</b> {query}...", parse_mode="HTML")
+    
+    api_url = f"{JIOSAAVN_API_BASE}/search/songs"
+    params = {"query": query, "page": 0, "limit": 1} # Only need the top result!
+    
+    try:
+        async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
+            async with session.get(api_url, params=params, timeout=10) as response:
+                if response.status != 200:
+                    await status_msg.edit_text("❌ Search API unresponsive.")
+                    return
+                data = await response.json()
+                
+        results = data.get("data", {}).get("results", [])
+        if not results:
+            await status_msg.edit_text("❌ No songs found! Try checking the spelling.")
+            return
+
+        # Grab the very first result and send it immediately
+        song_id = results[0].get("id")
+        await process_and_send_song(song_id, message.chat.id, status_msg)
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Instant Search Error: {e}")
 
 @dp.message(Command("reels"))
 async def handle_reels_command(message: types.Message):
@@ -158,7 +200,7 @@ async def execute_jio_search(message: types.Message, query: str):
     
     try:
         async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
-            async with session.get(api_url, params=params, timeout=15) as response:
+            async with session.get(api_url, params=params, timeout=10) as response:
                 if response.status != 200:
                     await status_msg.edit_text("❌ Search API is currently unresponsive.")
                     return
@@ -192,15 +234,30 @@ async def execute_jio_search(message: types.Message, query: str):
 @dp.callback_query(F.data.startswith("jiosong_"))
 async def handle_song_selection(callback: types.CallbackQuery):
     song_id = callback.data.split("_")[1]
-    status_msg = await callback.message.answer("⏳ Buffering media elements and audio track...")
+    status_msg = await callback.message.answer("⏳ Buffering media elements...")
     await callback.answer()
     
+    await process_and_send_song(song_id, callback.message.chat.id, status_msg)
+
+async def fetch_url_bytes(session, url):
+    """Helper function to download bytes concurrently"""
+    if not url: return None
+    try:
+        async with session.get(url, timeout=15) as resp:
+            if resp.status == 200:
+                return await resp.read()
+    except:
+        pass
+    return None
+
+async def process_and_send_song(song_id: str, chat_id: int, status_msg: types.Message):
+    """Refactored to handle processing and sending for both instant and manual searches, using concurrent downloads for speed."""
     api_url = f"{JIOSAAVN_API_BASE}/songs/{song_id}"
     
     try:
         # Step 1: Fetch Song Details
         async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
-            async with session.get(api_url, timeout=15) as response:
+            async with session.get(api_url, timeout=10) as response:
                 if response.status != 200:
                     await status_msg.edit_text("❌ Failed to retrieve song data.")
                     return
@@ -226,21 +283,16 @@ async def handle_song_selection(callback: types.CallbackQuery):
             await status_msg.edit_text("❌ Direct audio source track missing from API.")
             return
 
-        # Step 2: Download Audio & Cover Art directly to memory (RAM)
-        thumb_bytes = None
+        # Step 2: Download Audio & Cover Art CONCURRENTLY (Massive Speed Boost)
         async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
-            # Fetch Audio
-            async with session.get(stream_url, timeout=20) as audio_resp:
-                if audio_resp.status != 200:
-                    await status_msg.edit_text("❌ Failed to stream the audio file.")
-                    return
-                audio_bytes = await audio_resp.read()
+            audio_task = fetch_url_bytes(session, stream_url)
+            thumb_task = fetch_url_bytes(session, art_url)
             
-            # Fetch Cover Art for Thumbnail
-            if art_url:
-                async with session.get(art_url, timeout=10) as img_resp:
-                    if img_resp.status == 200:
-                        thumb_bytes = await img_resp.read()
+            audio_bytes, thumb_bytes = await asyncio.gather(audio_task, thumb_task)
+
+        if not audio_bytes:
+            await status_msg.edit_text("❌ Failed to stream the audio file.")
+            return
 
         # Step 3: Native Interaction Control Buttons
         native_control_markup = InlineKeyboardMarkup(inline_keyboard=[
@@ -263,8 +315,9 @@ async def handle_song_selection(callback: types.CallbackQuery):
         audio_file = BufferedInputFile(audio_bytes, filename=f"{title}.mp3")
         thumb_file = BufferedInputFile(thumb_bytes, filename="cover.jpg") if thumb_bytes else None
 
-        # Send as a SINGLE unified audio message (caption + inline buttons + audio player + cover art)
-        await callback.message.answer_audio(
+        # Send as a SINGLE unified audio message
+        await bot.send_audio(
+            chat_id=chat_id,
             audio=audio_file,
             thumbnail=thumb_file,
             caption=visual_frame_caption,
@@ -284,6 +337,10 @@ async def handle_song_selection(callback: types.CallbackQuery):
 @dp.message(F.chat.type.in_({"group", "supergroup"}))
 async def anti_spam_filter(message: types.Message):
     if not message.text:
+        return
+
+    # Let the "search " command pass through without triggering anti-spam if it contains blacklisted words by mistake
+    if message.text.lower().startswith("search "):
         return
 
     blacklisted_triggers = ["t.me/", "crypto leakage", "pump signals"]
