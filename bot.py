@@ -27,7 +27,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 # ================= Configuration =================
-TELEGRAM_BOT_TOKEN = "6067177575:AAEUVOteOiERUHE5v75iudEdHAGiCRXBGus"
+TELEGRAM_BOT_TOKEN = "YOUR_VALID_TOKEN_HERE"
 JIOSAAVN_API_BASE = "https://jiosavanapiryden.vercel.app/api"
 HOSTED_FRAME_URL = "https://your-secure-https-domain.com/frame"
 PRIMARY_WEB_PORT = 8081 
@@ -45,7 +45,7 @@ class BotStates(StatesGroup):
 async def serve_html_frame(request):
     """Serves the external music.html file"""
     file_path = os.path.join(os.path.dirname(__file__), 'music.html')
-    return web.FileResponse(file_path) grade
+    return web.FileResponse(file_path)
 
 async def serve_reels_frame(request):
     """Serves the external reels.html file"""
@@ -84,7 +84,7 @@ async def handle_jio_command(message: types.Message):
     if len(args) < 2:
         await message.answer("❌ Usage: `/jio <song name>`")
         return
-    await execute_jio_search(message, args[1]) grade
+    await execute_jio_search(message, args[1])
 
 @dp.message(Command("reels"))
 async def handle_reels_command(message: types.Message):
