@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JioSaavn Pro Player</title>
+    <style>
+        body { 
+            margin: 0; padding: 0; background-color: #0b0e14; color: #ffffff; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            height: 100vh; overflow: hidden; 
+        }
+        .player-card {
+            width: 85%; max-width: 400px; background: #121824; border-radius: 24px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6); padding: 24px; text-align: center;
+            border: 1px solid #1e293b;
+        }
+        .art-container {
+            width: 180px; height: 180px; margin: 0 auto 20px auto;
+            border-radius: 20px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            background: #1e293b; display: flex; align-items: center; justify-content: center;
+        }
+        .art-container img {
+            width: 100%; height: 100%; object-fit: cover;
+        }
+        h2 { margin: 0 0 6px 0; font-size: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        p { color: #64748b; font-size: 14px; margin: 0 0 24px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        audio { width: 100%; outline: none; }
+    </style>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="player-card">
+        <div class="art-container" id="art-wrapper">
+            <img id="album-art" src="https://via.placeholder.com/180x180/1e293b/ffffff?text=🎵" alt="Album Art">
+        </div>
+        <h2 id="track-title">Loading Track...</h2>
+        <p id="track-artist">JioSaavn Stream Pipeline</p>
+        
+        <div id="audio-wrapper"></div>
+    </div>
+
+    <script>
+        window.Telegram.WebApp.expand();
+        window.Telegram.WebApp.ready();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const mediaUrl = urlParams.get('url');
+        const title = urlParams.get('title');
+        const artist = urlParams.get('artist');
+        const artUrl = urlParams.get('art');
+
+        if (title) document.getElementById('track-title').innerText = decodeURIComponent(title);
+        if (artist) document.getElementById('track-artist').innerText = decodeURIComponent(artist);
+        if (artUrl) document.getElementById('album-art').src = decodeURIComponent(artUrl);
+
+        const wrapper = document.getElementById('audio-wrapper');
+
+        if (mediaUrl) {
+            const audioNode = document.createElement('audio');
+            audioNode.src = decodeURIComponent(mediaUrl);
+            audioNode.controls = true;
+            audioNode.autoplay = true;
+            wrapper.appendChild(audioNode);
+        } else {
+            wrapper.innerHTML = '<div style="color:#ef4444; font-size:14px;">❌ Audio stream URL is unavailable</div>';
+        }
+    </script>
+</body>
+</html>
