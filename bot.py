@@ -3,34 +3,31 @@ import subprocess
 import logging
 import urllib.parse
 import os
+import asyncio
 
 # ================= AUTO-INSTALLER =================
 try:
     import aiogram
     import aiohttp
 except ImportError:
-    print("⚙️ Missing libraries detected! Auto-installing 'aiogram' and 'aiohttp' on the server...")
+    print("⚙️ Missing libraries detected! Auto-installing 'aiogram' and 'aiohttp'...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "aiogram", "aiohttp"])
     import aiogram
     import aiohttp
     print("✅ Libraries installed successfully!")
 # ==================================================
 
-import asyncio
-from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo, ForceReply, BufferedInputFile
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply, BufferedInputFile
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
 # ================= Configuration =================
-TELEGRAM_BOT_TOKEN = "6067177575:AAEUVOteOiERUHE5v75iudEdHAGiCRXBGus"
+TELEGRAM_BOT_TOKEN = "YOUR_VALID_TOKEN_HERE"
 JIOSAAVN_API_BASE = "https://jiosavanapiryden.vercel.app/api"
-HOSTED_FRAME_URL = "https://your-secure-https-domain.com/frame"
-PRIMARY_WEB_PORT = 8081 
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
@@ -40,24 +37,12 @@ class BotStates(StatesGroup):
     waiting_for_jio_query = State()
     waiting_for_reels_link = State()
 
-# ================= Web Server File Handlers =================
-
-async def serve_html_frame(request):
-    """Serves the external music.html file"""
-    file_path = os.path.join(os.path.dirname(__file__), 'music.html')
-    return web.FileResponse(file_path)
-
-async def serve_reels_frame(request):
-    """Serves the external reels.html file"""
-    file_path = os.path.join(os.path.dirname(__file__), 'reels.html')
-    return web.FileResponse(file_path)
-
 # ================= Inline Menus =================
 def main_menu_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🎶 Search Music (JioSaavn)", callback_data="switch_jio_mode"),
-            InlineKeyboardButton(text="📱 Watch IG Reels", callback_data="switch_reels_mode")
+            InlineKeyboardButton(text="📱 Download IG Reels", callback_data="switch_reels_mode")
         ],
         [
             InlineKeyboardButton(text="🪪 Generate My ID", callback_data="generate_id"),
@@ -74,7 +59,7 @@ async def send_welcome(message: types.Message):
         f"Hello {message.from_user.first_name}!\n"
         "Your ultimate destination for high-quality music streaming.\n\n"
         "• `/jio <song name>` - Search & stream music directly inside the group.\n"
-        "• `/reels <ig link>` - Watch Instagram Reels directly inside the group."
+        "• `/reels <ig link>` - Process Instagram Reels directly inside the group."
     )
     await message.answer(welcome_text, reply_markup=main_menu_keyboard())
 
@@ -93,18 +78,15 @@ async def handle_reels_command(message: types.Message):
         await message.answer("❌ Usage: `/reels <instagram_reel_link>`")
         return
         
-    ig_url = args[1]
-    enc_url = urllib.parse.quote_plus(ig_url)
+    status_msg = await message.answer("🎬 <i>Processing native Instagram Video Frame...</i>", parse_mode="HTML")
+    await asyncio.sleep(1)
     
-    reels_frame_url = HOSTED_FRAME_URL.replace("/frame", "/reels_frame") + f"?url={enc_url}"
-    
-    output_control = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📱 Watch Reel in Frame", web_app=WebAppInfo(url=reels_frame_url))]
-    ])
-    
+    # NOTE: To send actual native videos like your screenshot, pass your video URL/file to video= below.
+    # Since web apps are removed, we display a placeholder layout pointing out native video handling.
+    await status_msg.delete()
     await message.answer(
-        "🎬 <b>Instagram Reel Engine Ready</b>\n\nClick the button below to seamlessly open the video frame:",
-        reply_markup=output_control,
+        "🎬 <b>NATIVE VIDEO PLAYER</b>\n\n"
+        "To drop live video streams directly in the chat window, plug your Instagram video scraping endpoint direct URL into <code>bot.send_video()</code>.",
         parse_mode="HTML"
     )
 
@@ -212,7 +194,7 @@ async def execute_jio_search(message: types.Message, query: str):
 @dp.callback_query(F.data.startswith("jiosong_"))
 async def handle_song_selection(callback: types.CallbackQuery):
     song_id = callback.data.split("_")[1]
-    status_msg = await callback.message.answer("⏳ Locating high-quality audio & video frames...")
+    status_msg = await callback.message.answer("⏳ Buffering visual elements and audio track...")
     await callback.answer()
     
     api_url = f"{JIOSAAVN_API_BASE}/songs/{song_id}"
@@ -245,10 +227,8 @@ async def handle_song_selection(callback: types.CallbackQuery):
         if not stream_url:
             await status_msg.edit_text("❌ Direct audio source track missing from API.")
             return
-            
-        await status_msg.edit_text("⚡ Fast-buffering stream directly into RAM...")
 
-        # Step 2: Download Audio directly to memory (RAM) for maximum execution speed
+        # Step 2: Download Audio directly to memory (RAM)
         async with aiohttp.ClientSession(headers={"User-Agent": "Mozilla/5.0"}) as session:
             async with session.get(stream_url, timeout=20) as audio_resp:
                 if audio_resp.status != 200:
@@ -256,39 +236,42 @@ async def handle_song_selection(callback: types.CallbackQuery):
                     return
                 audio_bytes = await audio_resp.read()
 
-        # Step 3: Package URL arguments for the Video Frame player
-        enc_url = urllib.parse.quote_plus(stream_url)
-        enc_title = urllib.parse.quote_plus(title)
-        enc_artist = urllib.parse.quote_plus(artists)
-        enc_art = urllib.parse.quote_plus(art_url)
-        
-        generated_frame_link = f"{HOSTED_FRAME_URL}?url={enc_url}&title={enc_title}&artist={enc_artist}&art={enc_art}"
-        
-        # Upper level UI control (Video Frame)
-        frame_control = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📺 Launch Visual/Video Frame Player", web_app=WebAppInfo(url=generated_frame_link))]
+        # Step 3: Native Interaction Control Buttons (Matches Screenshot Style)
+        native_control_markup = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📣 Updates Channel", url="https://t.me/your_channel"),
+                InlineKeyboardButton(text="🔍 Search Again", callback_data="switch_jio_mode")
+            ]
         ])
 
-        frame_caption = (
-            f"🎬 <b>VIDEO FRAME ENGINE ACTIVE</b>\n"
-            f"▼ Click below to open the display interface for: <b>{title}</b>"
+        visual_frame_caption = (
+            f"🎬 <b>NATIVE VISUAL FRAME ACTIVE</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎵 <b>Track:</b> {title}\n"
+            f"🎤 <b>Artist:</b> {artists}\n"
+            f"💿 <b>Album:</b> {album} ({year})"
         )
 
         audio_file = BufferedInputFile(audio_bytes, filename=f"{title}.mp3")
-        
-        audio_caption = (
-            f"🎵 <b>{title}</b>\n"
-            f"━━━━━━━━━━━━━━━━\n"
-            f"🎤 <b>Artist:</b> {artists}\n"
-            f"💿 <b>Album:</b> {album}\n"
-            f"📅 <b>Year:</b> {year}"
-        )
 
-        # Step 4: Dispatch items in sequential order (Frame message stacked directly above Native Audio)
-        await callback.message.answer(frame_caption, reply_markup=frame_control, parse_mode="HTML")
+        # Step 4: Dispatch native media layout sequentially
+        # Send the Album artwork image frame directly above the raw music clip track
+        if art_url:
+            await callback.message.answer_photo(
+                photo=art_url, 
+                caption=visual_frame_caption, 
+                reply_markup=native_control_markup, 
+                parse_mode="HTML"
+            )
+        else:
+            await callback.message.answer(
+                visual_frame_caption, 
+                reply_markup=native_control_markup, 
+                parse_mode="HTML"
+            )
+
         await callback.message.answer_audio(
             audio=audio_file,
-            caption=audio_caption,
             title=title,
             performer=artists,
             parse_mode="HTML"
@@ -316,43 +299,16 @@ async def anti_spam_filter(message: types.Message):
         except TelegramBadRequest:
             pass
 
-# ================= Web App Engine Bindings =================
+# ================= Bot Engine Initialization =================
 
 async def main():
-    logging.info("🚀 Instantiating multi-threaded asynchronous server loop...")
-    
-    app = web.Application()
-    app.router.add_get('/frame', serve_html_frame)
-    app.router.add_get('/reels_frame', serve_reels_frame)
-    
-    runner = web.AppRunner(app)
-    await runner.setup()
-    
-    bound_port = None
-    try:
-        site = web.TCPSite(runner, '0.0.0.0', PRIMARY_WEB_PORT)
-        await site.start()
-        bound_port = PRIMARY_WEB_PORT
-    except OSError as e:
-        if e.errno == 98: 
-            logging.warning(f"⚠️ Port {PRIMARY_WEB_PORT} occupied. Searching for open virtual socket allocation...")
-            site = web.TCPSite(runner, '0.0.0.0', 0)
-            await site.start()
-            bound_port = site._server.sockets[0].getsockname()[1]
-        else:
-            raise e
-            
-    logging.info(f"🌐 Dynamic UI Frame Web Server successfully serving active client on port {bound_port}")
-    
+    logging.info("🤖 Framework polling active. Native bot environment loaded.")
     try:
         await bot.delete_webhook(drop_pending_updates=True)
-        logging.info("🤖 Framework polling active. Native bot is online.")
         await dp.start_polling(bot)
     except Exception as e:
         logging.critical(f"❌ Core runtime loop exception encountered: {e}")
     finally:
-        logging.info("🧹 Safely killing background web infrastructure layers...")
-        await runner.cleanup()
         await bot.session.close() 
         logging.info("⚙️ Execution routine halted cleanly.")
 
